@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generador de Ideas para Pokémon</title>
+    <style>
+        /* --- Estilos Generales --- */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f0f2f5;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* --- Contenedor Principal --- */
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            text-align: center;
+            background-color: #ffffff;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            color: #d9534f; /* Rojo Pokémon */
+            margin-bottom: 0.5rem;
+        }
+
+        p {
+            color: #555;
+            margin-bottom: 2rem;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        /* --- Controles (Select y Botón) --- */
+        .controls {
+            margin-bottom: 2rem;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        #type-select {
+            padding: 10px 15px;
+            font-size: 1rem;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            cursor: pointer;
+            background-color: #fff;
+        }
+
+        #generate-btn {
+            padding: 12px 25px;
+            font-size: 1rem;
+            font-weight: bold;
+            color: #fff;
+            background-color: #337ab7; /* Azul Pokémon */
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s ease, transform 0.1s ease;
+        }
+
+        #generate-btn:hover {
+            background-color: #286090;
+        }
+
+        #generate-btn:active {
+            transform: scale(0.98);
+        }
+        
+        /* --- Indicador de Carga --- */
+        #loading {
+            font-size: 1.2rem;
+            color: #555;
+            display: none; /* Oculto por defecto */
+        }
+
+        /* --- Grid para los Resultados --- */
+        .results-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5rem;
+            margin-top: 1rem;
+        }
+
+        /* --- Tarjeta de Resultado Individual --- */
+        .result-card {
+            background-color: #fafafa;
+            border: 1px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        
+        .result-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.1);
+        }
+
+        .result-card h2 {
+            margin: 0 0 0.5rem 0;
+            font-size: 1.1rem;
+            color: #337ab7;
+            text-transform: capitalize;
+        }
+
+        .result-card img {
+            width: 150px;
+            height: 150px;
+            object-fit: contain;
+            margin-bottom: 0.5rem;
+        }
+
+        .result-card .pokemon-name {
+            font-weight: bold;
+            text-transform: capitalize;
+        }
+
+        /* --- Mensaje de Error --- */
+        .error {
+            color: #d9534f;
+            font-weight: bold;
+            font-size: 1.2rem;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Generador de Ideas para Pokémon</h1>
+        <p>¿Bloqueado creativamente? Elige un tipo de Pokémon y haz clic en "Generar" para obtener ideas aleatorias basadas en Pokémon existentes. ¡Combínalas para crear tu propio Fakemon!</p>
+
+        <div class="controls">
+            <select id="type-select"></select>
+            <button id="generate-btn">Generar Ideas</button>
+        </div>
+
+        <div id="loading">Buscando Pokémon en la Pokédex...  Pokémons...</div>
+        
+        <div id="results-container" class="results-grid"></div>
+    </div>
+
+    <script>
+        // --- Referencias a los elementos del DOM ---
+        const typeSelect = document.getElementById('type-select');
+        const generateBtn = document.getElementById('generate-btn');
+        const resultsContainer = document.getElementById('results-container');
+        const loadingDiv = document.getElementById('loading');
+
+        // --- Datos de la aplicación ---
+        const POKEAPI_BASE_URL = 'https://pokeapi.co/api/v2/';
+        const tiposPokemon = [
+            'normal', 'fire', 'water', 'grass', 'electric', 'ice', 'fighting', 'poison', 
+            'ground', 'flying', 'psychic', 'bug', 'rock', 'ghost', 'dragon', 'dark', 
+            'steel', 'fairy'
+        ];
+        
+        const partesCuerpo = [
+            'cabeza', 'cuerpo', 'ojos', 'boca y nariz', 'orejas', 'patas delanteras',
+            'patas traseras', 'cola', 'accesorios', 'colores'
+        ];
+
+        // --- Funciones ---
+
+        // 1. Poblar el menú desplegable con los tipos de Pokémon
+        function poblarTipos() {
+            tiposPokemon.forEach(tipo => {
+                const option = document.createElement('option');
+                option.value = tipo;
+                option.textContent = tipo.charAt(0).toUpperCase() + tipo.slice(1);
+                typeSelect.appendChild(option);
+            });
+        }
+
+        // 2. Crear una tarjeta de resultado y añadirla al DOM
+        function crearTarjetaResultado(parte, pokemon) {
+            const card = document.createElement('div');
+            card.className = 'result-card';
+
+            const artworkUrl = pokemon.sprites.other['official-artwork'].front_default;
+            
+            // Si no hay artwork oficial, usar el sprite por defecto
+            const imageUrl = artworkUrl ? artworkUrl : pokemon.sprites.front_default;
+
+            card.innerHTML = `
+                <h2>${parte}</h2>
+                <img src="${imageUrl}" alt="Artwork de ${pokemon.name}">
+                <p class="pokemon-name">${pokemon.name}</p>
+            `;
+            resultsContainer.appendChild(card);
+        }
+
+        // 3. Función principal para generar las ideas
+        async function generarIdeas() {
+            const tipoSeleccionado = typeSelect.value;
+            
+            // Limpiar resultados anteriores y mostrar carga
+            resultsContainer.innerHTML = '';
+            loadingDiv.style.display = 'block';
+            generateBtn.disabled = true;
+
+            try {
+                // Paso 1: Obtener la lista de todos los Pokémon de un tipo específico
+                const responseType = await fetch(`${POKEAPI_BASE_URL}type/${tipoSeleccionado}`);
+                if (!responseType.ok) {
+                    throw new Error('No se pudo encontrar el tipo de Pokémon.');
+                }
+                const data = await responseType.json();
+                const pokemonDeEseTipo = data.pokemon.map(p => p.pokemon);
+
+                // Paso 2: Crear un array de promesas para obtener los detalles de Pokémon aleatorios
+                const promesasPokemon = partesCuerpo.map(async (parte) => {
+                    // Elegir un Pokémon al azar de la lista
+                    const randomIndex = Math.floor(Math.random() * pokemonDeEseTipo.length);
+                    const pokemonInfo = pokemonDeEseTipo[randomIndex];
+
+                    // Obtener los detalles completos de ese Pokémon (para la imagen)
+                    const responsePokemon = await fetch(pokemonInfo.url);
+                    if (!responsePokemon.ok) {
+                        throw new Error(`No se pudo obtener la información de ${pokemonInfo.name}.`);
+                    }
+                    return {
+                        parte: parte,
+                        pokemon: await responsePokemon.json()
+                    };
+                });
+
+                // Paso 3: Esperar a que todas las promesas se resuelvan
+                const resultados = await Promise.all(promesasPokemon);
+
+                // Paso 4: Crear las tarjetas con los resultados
+                resultados.forEach(res => {
+                    crearTarjetaResultado(res.parte, res.pokemon);
+                });
+
+            } catch (error) {
+                console.error("Error al generar ideas:", error);
+                resultsContainer.innerHTML = `<p class="error">¡Oh no! Hubo un error al contactar la Pokédex. Por favor, inténtalo de nuevo. (${error.message})</p>`;
+            } finally {
+                // Ocultar carga y reactivar el botón
+                loadingDiv.style.display = 'none';
+                generateBtn.disabled = false;
+            }
+        }
+
+        // --- Inicialización ---
+        document.addEventListener('DOMContentLoaded', () => {
+            poblarTipos();
+            generateBtn.addEventListener('click', generarIdeas);
+        });
+
+    </script>
+</body>
+</html>
